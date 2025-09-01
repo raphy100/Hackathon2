@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student & Teacher Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+   <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div id="auth-forms">
+            <h1>Welcome to the School Portal</h1>
+            <div class="tab-buttons">
+                <button id="register-btn" onclick="showForm('register')">Register</button>
+                <button id="login-btn" onclick="showForm('login')">Login</button>
+            </div>
+            
+            <div id="register-form" class="form-container">
+                <h2>Register as a New User</h2>
+                <form id="registrationForm">
+                    <input type="text" id="name" placeholder="Name" required>
+                    <input type="email" id="regEmail" placeholder="Email" required>
+                    <input type="password" id="regPassword" placeholder="Password" required>
+                    <select id="regRole" required>
+                        <option value="">Select Role</option>
+                        <option value="student">Student</option>
+                        <option value="teacher">Teacher</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <button type="submit" class="submit-btn">Register</button>
+                </form>
+            </div>
+            
+            <div id="login-form" class="form-container">
+                <h2>Login to Your Account</h2>
+                <form id="loginForm">
+                    <input type="email" id="loginEmail" placeholder="Email" required>
+                    <input type="password" id="loginPassword" placeholder="Password" required>
+                    <button type="submit" class="submit-btn">Login</button>
+                </form>
+            </div>
+            
+            <div id="message-container" class="message-box"></div>
+        </div>
+
+        <div id="student-dashboard" class="dashboard-content">
+            <h2>Student Dashboard</h2>
+            <p>Welcome, <span id="student-name">Student!</span></p>
+            <div class="dashboard-tabs">
+                <button onclick="showStudentContent('notes')">Notes</button>
+                <button onclick="showStudentContent('tests')">Tests</button>
+                <button onclick="showStudentContent('performance')">Performance</button>
+            </div>
+            <div id="student-notes-content" class="section-content">
+                <h3>Class Notes</h3>
+                <div id="student-notes-container">
+                    <p>No notes have been uploaded yet.</p>
+                </div>
+            </div>
+            <div id="student-tests-content" class="section-content" style="display:none;">
+                <h3>Available Tests</h3>
+                <div id="student-tests-container">
+                    <p>No tests have been created yet.</p>
+                </div>
+            </div>
+            <div id="student-performance-content" class="section-content" style="display:none;">
+                <h3>Performance</h3>
+                <div id="student-performance-container">
+                    <p>This section will show your test scores and progress over time.</p>
+                </div>
+            </div>
+            <button id="logout-btn" onclick="logout()">Logout</button>
+        </div>
+
+        <div id="teacher-dashboard" class="dashboard-content">
+            <h2>Teacher Dashboard</h2>
+            <p>Welcome, <span id="teacher-name">Teacher!</span></p>
+            <div class="dashboard-tabs">
+                <button onclick="showTeacherContent('monitor')">Monitor Performance</button>
+                <button onclick="showTeacherContent('notes')">Upload Notes</button>
+                <button onclick="showTeacherContent('test')">Create Test</button>
+                <button onclick="showTeacherContent('lesson-plan')">Generate Lesson Plan</button>
+            </div>
+
+            <div id="monitor-content" class="section-content">
+                <h3>Monitor Student Performance</h3>
+                <div id="performance-container">
+                     <p>This is a placeholder for a list of students and their scores. This data will be retrieved from the backend when you implement the data retrieval logic.</p>
+                </div>
+            </div>
+
+            <div id="notes-content" class="section-content" style="display:none;">
+                <h3>Upload Notes</h3>
+                <form id="uploadNotesForm">
+                    <input type="text" id="noteTitle" placeholder="Note Title" required>
+                    <textarea id="noteContent" rows="10" placeholder="Type your notes here..." required></textarea>
+                    <button type="button" class="gemini-btn" onclick="summarizeNotes()">✨ Summarize Notes</button>
+                    <button type="submit" class="submit-btn">Upload Note</button>
+                </form>
+            </div>
+
+            <div id="test-content" class="section-content" style="display:none;">
+                <h3>Create New Test</h3>
+                <form id="createTestForm">
+                    <input type="text" id="testTitle" placeholder="Test Title" required>
+                    <input type="text" id="testSubject" placeholder="Subject" required>
+                    
+                    <button type="button" class="gemini-btn" onclick="generateQuestions()">✨ Generate Questions</button>
+                    
+                    <div id="questions-container">
+                        <!-- Question blocks will be added here dynamically -->
+                    </div>
+                    
+                    <button type="button" class="add-btn" onclick="addQuestion()">Add Question</button>
+                    <button type="submit" class="submit-btn">Create Test</button>
+                </form>
+            </div>
+
+            <div id="lesson-plan-content" class="section-content" style="display:none;">
+                <h3>Generate Lesson Plan</h3>
+                <form id="generateLessonPlanForm">
+                    <input type="text" id="lessonSubject" placeholder="Subject" required>
+                    <input type="text" id="lessonTopic" placeholder="Topic" required>
+                    <button type="button" class="gemini-btn" onclick="generateLessonPlan()">✨ Generate Lesson Plan</button>
+                    <textarea id="lessonPlanOutput" rows="15" placeholder="Generated lesson plan will appear here..." readonly></textarea>
+                </form>
+            </div>
+            
+            <button id="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <script>
+        const GEMINI_API_KEY = 'AIzaSyAwycHi3y0CdywodV4S9YMqnc1--eaHHY8';
+        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+
+        let loggedInUser = null;
+        const USERS_KEY = 'users';
+        const NOTES_KEY = 'notes';
+        const TESTS_KEY = 'tests';
+        const PERFORMANCE_KEY = 'performance';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const storedUser = localStorage.getItem('loggedInUser');
+            if (storedUser) {
+                loggedInUser = JSON.parse(storedUser);
+                handleLoginSuccess(loggedInUser.role, loggedInUser.name);
+            } else {
+                showForm('register');
+            }
+        });
+        
+        function showForm(formId) {
+            const registerForm = document.getElementById('register-form');
+            const loginForm = document.getElementById('login-form');
+            const registerBtn = document.getElementById('register-btn');
+            const loginBtn = document.getElementById('login-btn');
+
+            if (formId === 'register') {
+                registerForm.style.display = 'block';
+                loginForm.style.display = 'none';
+                registerBtn.classList.add('active');
+                loginBtn.classList.remove('active');
+            } else if (formId === 'login') {
+                registerForm.style.display = 'none';
+                loginForm.style.display = 'block';
+                registerBtn.classList.remove('active');
+                loginBtn.classList.add('active');
+            }
+            
+            document.getElementById('auth-forms').style.display = 'block';
+            document.getElementById('student-dashboard').style.display = 'none';
+            document.getElementById('teacher-dashboard').style.display = 'none';
+            document.getElementById('message-container').style.display = 'none';
+        }
+
+        function showTeacherContent(contentId) {
+            const sections = ['monitor', 'notes', 'test', 'lesson-plan'];
+            sections.forEach(id => {
+                const element = document.getElementById(id + '-content');
+                if (element) element.style.display = 'none';
+            });
+
+            const contentToShow = document.getElementById(contentId + '-content');
+            if (contentToShow) contentToShow.style.display = 'block';
+
+            document.querySelectorAll('.dashboard-tabs button').forEach(button => {
+                button.classList.remove('active');
+            });
+            const activeBtn = document.querySelector(`.dashboard-tabs button[onclick="showTeacherContent('${contentId}')"]`);
+            if (activeBtn) activeBtn.classList.add('active');
+            
+            if (contentId === 'monitor') {
+                displayPerformance();
+            }
+        }
+
+        function showStudentContent(contentId) {
+            const sections = ['notes', 'tests', 'performance'];
+            sections.forEach(id => {
+                const element = document.getElementById(`student-${id}-content`);
+                if (element) element.style.display = 'none';
+            });
+            const contentToShow = document.getElementById(`student-${contentId}-content`);
+            if (contentToShow) contentToShow.style.display = 'block';
+            document.querySelectorAll('#student-dashboard .dashboard-tabs button').forEach(button => {
+                button.classList.remove('active');
+            });
+            const activeBtn = document.querySelector(`#student-dashboard .dashboard-tabs button[onclick="showStudentContent('${contentId}')"]`);
+            if (activeBtn) activeBtn.classList.add('active');
+            if (contentId === 'notes') {
+                displayNotes();
+            } else if (contentId === 'tests') {
+                displayTests();
+            } else if (contentId === 'performance') {
+                displayStudentPerformance();
+            }
+        }
+
+        function registerUser(event) {
+            event.preventDefault();
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+            const role = document.getElementById('regRole').value;
+
+            try {
+                const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+                if (users.some(user => user.email === email)) {
+                    showMessage('Registration failed: User with this email already exists.', 'error');
+                    return;
+                }
+                
+                const newUser = { id: Date.now(), name, email, password, role };
+                users.push(newUser);
+                localStorage.setItem(USERS_KEY, JSON.stringify(users));
+                
+                showMessage('Registration successful! You can now log in.', 'success');
+                document.getElementById('registrationForm').reset();
+                showForm('login');
+            } catch (error) {
+                console.error('Registration error:', error);
+                showMessage('Failed to register user. Please try again.', 'error');
+            }
+        }
+
+        function loginUser(event) {
+            event.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+                const user = users.find(u => u.email === email && u.password === password);
+                
+                if (user) {
+                    localStorage.setItem('loggedInUser', JSON.stringify(user));
+                    loggedInUser = user;
+                    handleLoginSuccess(user.role, user.name);
+                } else {
+                    showMessage('Login failed. Invalid email or password.', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showMessage('Login failed. Please check your credentials.', 'error');
+            }
+        }
+        
+        function handleLoginSuccess(role, name) {
+            const authForms = document.getElementById('auth-forms');
+            if (authForms) authForms.style.display = 'none';
+            const messageContainer = document.getElementById('message-container');
+            if (messageContainer) messageContainer.style.display = 'none';
+
+            if (role === 'teacher' || role === 'admin') {
+                const teacherDashboard = document.getElementById('teacher-dashboard');
+                if (teacherDashboard) teacherDashboard.style.display = 'block';
+                const teacherName = document.getElementById('teacher-name');
+                if (teacherName) teacherName.textContent = name;
+                showTeacherContent('monitor');
+            } else {
+                const studentDashboard = document.getElementById('student-dashboard');
+                if (studentDashboard) studentDashboard.style.display = 'block';
+                const studentName = document.getElementById('student-name');
+                if (studentName) studentName.textContent = name;
+                showStudentContent('notes');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('loggedInUser');
+            loggedInUser = null;
+            showForm('login');
+            showMessage('You have been logged out.', 'success');
+        }
+
+        function showMessage(message, type) {
+            const msgBox = document.getElementById('message-container');
+            if (msgBox) {
+                msgBox.textContent = message;
+                msgBox.className = `message-box ${type}`;
+                msgBox.style.display = 'block';
+            }
+        }
+
+        function displayNotes() {
+            const notesContainer = document.getElementById('student-notes-container');
+            if (!notesContainer) return;
+            try {
+                const notes = JSON.parse(localStorage.getItem(NOTES_KEY) || '[]');
+                if (notes.length === 0) {
+                    notesContainer.innerHTML = '<p>No notes have been uploaded yet.</p>';
+                    return;
+                }
+                notesContainer.innerHTML = notes.map(note => `
+                    <div class="note-item">
+                        <h4>${note.title}</h4>
+                        <p>${note.content}</p>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to parse notes from localStorage:', e);
+                notesContainer.innerHTML = '<p>Error loading notes.</p>';
+            }
+        }
+
+        function displayTests() {
+            const testsContainer = document.getElementById('student-tests-container');
+            if (!testsContainer) return;
+            try {
+                const tests = JSON.parse(localStorage.getItem(TESTS_KEY) || '[]');
+                if (tests.length === 0) {
+                    testsContainer.innerHTML = '<p>No tests have been created yet.</p>';
+                    return;
+                }
+                testsContainer.innerHTML = tests.map(test => `
+                    <div class="test-item">
+                        <h4>${test.title}</h4>
+                        <p>Subject: ${test.subject}</p>
+                        <p>${test.questions.length} questions</p>
+                        <button onclick="takeTest('${test.id}')">Take Test</button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to parse tests from localStorage:', e);
+                testsContainer.innerHTML = '<p>Error loading tests.</p>';
+            }
+        }
+
+        function displayPerformance() {
+            const performanceContainer = document.getElementById('performance-container');
+            if (!performanceContainer) return;
+
+            try {
+                const allPerformance = JSON.parse(localStorage.getItem(PERFORMANCE_KEY) || '[]');
+                const allUsers = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+                
+                if (allPerformance.length === 0) {
+                    performanceContainer.innerHTML = '<p>No student test data available yet.</p>';
+                    return;
+                }
+
+                performanceContainer.innerHTML = allPerformance.map(entry => {
+                    const student = allUsers.find(u => u.id === entry.userId);
+                    const studentName = student ? student.name : 'Unknown Student';
+                    return `
+                        <div class="performance-item">
+                            <h4>${studentName}</h4>
+                            <p>Test: ${entry.testTitle}</p>
+                            <p>Score: ${entry.score} / ${entry.totalScore}</p>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error('Failed to parse performance data from localStorage:', e);
+                performanceContainer.innerHTML = '<p>Error loading performance data.</p>';
+            }
+        }
+        
+        function takeTest(testId) {
+            const tests = JSON.parse(localStorage.getItem(TESTS_KEY) || '[]');
+            const test = tests.find(t => t.id === testId);
+            if (!test) {
+                showMessage('Test not found.', 'error');
+                return;
+            }
+
+            const studentDashboard = document.getElementById('student-dashboard');
+            const studentTestsContent = document.getElementById('student-tests-content');
+            if (!studentDashboard || !studentTestsContent) return;
+
+            const testHtml = `
+                <h3>${test.title}</h3>
+                <form id="studentTestForm">
+                    <input type="hidden" id="currentTestId" value="${test.id}">
+                    ${test.questions.map((q, index) => `
+                        <div class="question-form-group">
+                            <h4>Question ${index + 1}</h4>
+                            <p>${q.qText}</p>
+                            ${q.qType === 'objective' ?
+                                q.options.map(option => `
+                                    <div class="option-container">
+                                        <input type="radio" name="question-${index}" value="${option}">
+                                        <label>${option}</label>
+                                    </div>
+                                `).join('')
+                                :
+                                `<textarea name="question-${index}" rows="4" placeholder="Your answer..."></textarea>`
+                            }
+                        </div>
+                    `).join('')}
+                    <button type="submit" class="submit-btn">Submit Test</button>
+                </form>
+            `;
+            studentTestsContent.innerHTML = testHtml;
+            document.getElementById('studentTestForm').addEventListener('submit', submitTest);
+        }
+
+        function submitTest(event) {
+            event.preventDefault();
+            const testId = document.getElementById('currentTestId').value;
+            const tests = JSON.parse(localStorage.getItem(TESTS_KEY) || '[]');
+            const test = tests.find(t => t.id === testId);
+            if (!test) {
+                showMessage('Error: Test not found.', 'error');
+                return;
+            }
+
+            let score = 0;
+            let totalScore = test.questions.length;
+            const form = event.target;
+
+            test.questions.forEach((q, index) => {
+                const questionElement = form.querySelector(`.question-form-group:nth-of-type(${index + 1})`);
+                if (q.qType === 'objective') {
+                    const selectedOption = questionElement.querySelector(`input[name="question-${index}"]:checked`);
+                    if (selectedOption && selectedOption.value === q.correctAnswer) {
+                        score++;
+                    }
+                }
+            });
+
+            try {
+                const performanceData = JSON.parse(localStorage.getItem(PERFORMANCE_KEY) || '[]');
+                performanceData.push({
+                    userId: loggedInUser.id,
+                    testTitle: test.title,
+                    score: score,
+                    totalScore: totalScore,
+                    date: new Date().toISOString()
+                });
+                localStorage.setItem(PERFORMANCE_KEY, JSON.stringify(performanceData));
+                showMessage(`Test submitted! Your score is ${score} out of ${totalScore}.`, 'success');
+                showStudentContent('tests');
+            } catch (e) {
+                console.error('Failed to save performance data:', e);
+                showMessage('Failed to submit test. Please try again.', 'error');
+            }
+        }
+
+
+        async function uploadNotes(event) {
+            event.preventDefault();
+            const noteTitle = document.getElementById('noteTitle').value;
+            const noteContent = document.getElementById('noteContent').value;
+            
+            try {
+                const notes = JSON.parse(localStorage.getItem(NOTES_KEY) || '[]');
+                notes.push({ title: noteTitle, content: noteContent, date: new Date().toISOString() });
+                localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+                
+                showMessage('Notes uploaded successfully!', 'success');
+                document.getElementById('uploadNotesForm').reset();
+            } catch (e) {
+                console.error('Failed to save notes to localStorage:', e);
+                showMessage('Failed to upload notes. Please try again.', 'error');
+            }
+        }
+
+        async function summarizeNotes() {
+            const notesTextarea = document.getElementById('noteContent');
+            if (!notesTextarea) return;
+            const originalContent = notesTextarea.value;
+            if (originalContent.trim() === '') {
+                showMessage('Please enter some notes to summarize.', 'error');
+                return;
+            }
+
+            const summarizeBtn = document.querySelector('#notes-content .gemini-btn');
+            if (!summarizeBtn) return;
+            summarizeBtn.disabled = true;
+            summarizeBtn.innerHTML = '<span class="loading-spinner"></span> Summarizing...';
+
+            const systemPrompt = "You are a helpful assistant for teachers. Your task is to summarize the provided notes into a clear and concise paragraph, focusing on the key concepts. The summary should be easy for students to understand. Do not add any extra text or conversational phrases. Only provide the summary.";
+            const userQuery = `Summarize the following notes:\n\n${originalContent}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+            
+            try {
+                const response = await fetch(GEMINI_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                const summary = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (summary) {
+                    notesTextarea.value = summary;
+                    showMessage('Notes summarized successfully!', 'success');
+                } else {
+                    showMessage('Failed to generate summary. Please try again.', 'error');
+                }
+            } catch (error) {
+                console.error('Gemini API error:', error);
+                showMessage('An error occurred with the AI. Please try again later.', 'error');
+            } finally {
+                summarizeBtn.disabled = false;
+                summarizeBtn.innerHTML = '✨ Summarize Notes';
+            }
+        }
+        
+        let questionCounter = 0;
+        function addQuestion() {
+            questionCounter++;
+            const questionsContainer = document.getElementById('questions-container');
+            if (!questionsContainer) return;
+            const questionHtml = `
+                <div class="question-form-group">
+                    <h4>Question ${questionCounter}</h4>
+                    <label for="qType${questionCounter}">Question Type:</label>
+                    <select id="qType${questionCounter}" onchange="toggleOptions(${questionCounter})">
+                        <option value="objective">Objective</option>
+                        <option value="theory">Theory</option>
+                    </select><br>
+                    <label for="qText${questionCounter}">Question:</label>
+                    <input type="text" id="qText${questionCounter}" required><br>
+                    <div id="options-group-${questionCounter}" class="question-options">
+                        <label>Options:</label>
+                        <div class="option-container"><input type="text" class="option-input" placeholder="Option A"><button type="button" onclick="removeOption(this)">-</button></div>
+                        <div class="option-container"><input type="text" class="option-input" placeholder="Option B"><button type="button" onclick="removeOption(this)">-</button></div>
+                        <div class="option-container"><input type="text" class="option-input" placeholder="Option C"><button type="button" onclick="removeOption(this)">-</button></div>
+                        <div class="option-container"><input type="text" class="option-input" placeholder="Option D"><button type="button" onclick="removeOption(this)">-</button></div>
+                        <button type="button" onclick="addOption(${questionCounter})">Add Option</button>
+                    </div>
+                    <label for="correctAnswer${questionCounter}">Correct Answer:</label>
+                    <input type="text" id="correctAnswer${questionCounter}" required>
+                </div>
+            `;
+            questionsContainer.insertAdjacentHTML('beforeend', questionHtml);
+        }
+
+        function toggleOptions(questionNumber) {
+            const typeSelect = document.getElementById(`qType${questionNumber}`);
+            if (!typeSelect) return;
+            const type = typeSelect.value;
+
+            const optionsGroup = document.getElementById(`options-group-${questionNumber}`);
+            if (!optionsGroup) return;
+
+            if (type === 'objective') {
+                optionsGroup.style.display = 'block';
+            } else {
+                optionsGroup.style.display = 'none';
+            }
+        }
+
+        function addOption(questionNumber) {
+            const optionsGroup = document.getElementById(`options-group-${questionNumber}`);
+            if (!optionsGroup) return;
+            const newOptionHtml = `
+                <div class="option-container">
+                    <input type="text" class="option-input" placeholder="New Option">
+                    <button type="button" onclick="removeOption(this)">-</button>
+                </div>
+            `;
+            optionsGroup.insertAdjacentHTML('beforeend', newOptionHtml);
+        }
+
+        function removeOption(button) {
+            if (button && button.parentElement) {
+                button.parentElement.remove();
+            }
+        }
+
+        async function generateQuestions() {
+            const subject = document.getElementById('testSubject').value;
+            const title = document.getElementById('testTitle').value;
+            if (subject.trim() === '' || title.trim() === '') {
+                showMessage('Please enter a subject and a title for the test.', 'error');
+                return;
+            }
+
+            const questionsContainer = document.getElementById('questions-container');
+            const generateBtn = document.querySelector('#test-content .gemini-btn');
+            if (!questionsContainer || !generateBtn) return;
+            
+            questionsContainer.innerHTML = '<div class="loading-spinner"></div><p style="text-align:center;">Generating questions...</p>';
+            generateBtn.disabled = true;
+
+            const systemPrompt = "You are an expert test creator. Based on the provided subject and topic, generate a JSON array of 5 multiple-choice questions. Each question object should have a 'question_text' string, an 'options' array of strings, and a 'correct_answer' string. The JSON should be well-formed and contain only the array. Do not include any other text or conversational phrases. Only the JSON array.";
+            const userQuery = `Create 5 multiple-choice questions for a test on the subject "${subject}" with the topic "${title}".`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "ARRAY",
+                        items: {
+                            type: "OBJECT",
+                            properties: {
+                                "question_text": { "type": "STRING" },
+                                "options": { "type": "ARRAY", "items": { "type": "STRING" } },
+                                "correct_answer": { "type": "STRING" }
+                            },
+                            "propertyOrdering": ["question_text", "options", "correct_answer"]
+                        }
+                    }
+                }
+            };
+
+            try {
+                const response = await fetch(GEMINI_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                const jsonText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (jsonText) {
+                    const questions = JSON.parse(jsonText);
+                    questionsContainer.innerHTML = '';
+                    questionCounter = 0;
+                    questions.forEach(q => {
+                        addQuestionFromObject(q);
+                    });
+                    showMessage('Questions generated successfully!', 'success');
+                } else {
+                    questionsContainer.innerHTML = '<p style="text-align:center;">Failed to generate questions. Please try again.</p>';
+                }
+            } catch (error) {
+                console.error('Gemini API error:', error);
+                questionsContainer.innerHTML = '<p style="text-align:center;">An error occurred with the AI. Please try again later.</p>';
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '✨ Generate Questions';
+            }
+        }
+        
+        function addQuestionFromObject(questionObj) {
+            questionCounter++;
+            const questionsContainer = document.getElementById('questions-container');
+            if (!questionsContainer) return;
+            
+            const optionsHtml = questionObj.options.map(option => `
+                <div class="option-container">
+                    <input type="text" class="option-input" value="${option}" placeholder="Option"><button type="button" onclick="removeOption(this)">-</button>
+                </div>
+            `).join('');
+
+            const questionHtml = `
+                <div class="question-form-group">
+                    <h4>Question ${questionCounter}</h4>
+                    <label for="qType${questionCounter}">Question Type:</label>
+                    <select id="qType${questionCounter}" onchange="toggleOptions(${questionCounter})">
+                        <option value="objective">Objective</option>
+                        <option value="theory">Theory</option>
+                    </select><br>
+                    <label for="qText${questionCounter}">Question:</label>
+                    <input type="text" id="qText${questionCounter}" value="${questionObj.question_text}" required><br>
+                    <div id="options-group-${questionCounter}" class="question-options">
+                        <label>Options:</label>
+                        ${optionsHtml}
+                        <button type="button" onclick="addOption(${questionCounter})">Add Option</button>
+                    </div>
+                    <label for="correctAnswer${questionCounter}">Correct Answer:</label>
+                    <input type="text" id="correctAnswer${questionCounter}" value="${questionObj.correct_answer}" required>
+                </div>
+            `;
+            questionsContainer.insertAdjacentHTML('beforeend', questionHtml);
+        }
+
+        async function createTest(event) {
+            event.preventDefault();
+            const testTitle = document.getElementById('testTitle').value;
+            const testSubject = document.getElementById('testSubject').value;
+            const questions = [];
+            document.querySelectorAll('.question-form-group').forEach((qGroup, index) => {
+                const qType = qGroup.querySelector('select').value;
+                const qText = qGroup.querySelector('input[type="text"]').value;
+                const options = Array.from(qGroup.querySelectorAll('.option-input')).map(input => input.value);
+                const correctAnswer = qGroup.querySelector(`#correctAnswer${index + 1}`).value;
+                questions.push({ qType, qText, options, correctAnswer });
+            });
+            
+            try {
+                const tests = JSON.parse(localStorage.getItem(TESTS_KEY) || '[]');
+                const newTest = { id: Date.now().toString(), title: testTitle, subject: testSubject, questions };
+                tests.push(newTest);
+                localStorage.setItem(TESTS_KEY, JSON.stringify(tests));
+
+                showMessage('Test created successfully!', 'success');
+                document.getElementById('createTestForm').reset();
+                document.getElementById('questions-container').innerHTML = '';
+                questionCounter = 0;
+            } catch (e) {
+                console.error('Failed to save test to localStorage:', e);
+                showMessage('Failed to create test. Please try again.', 'error');
+            }
+        }
+
+        async function generateLessonPlan() {
+            const subject = document.getElementById('lessonSubject').value;
+            const topic = document.getElementById('lessonTopic').value;
+            const outputTextarea = document.getElementById('lessonPlanOutput');
+            const generateBtn = document.querySelector('#lesson-plan-content .gemini-btn');
+            
+            if (subject.trim() === '' || topic.trim() === '') {
+                showMessage('Please enter both a subject and a topic.', 'error');
+                return;
+            }
+
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<span class="loading-spinner"></span> Generating...';
+            outputTextarea.value = 'Generating lesson plan...';
+            
+            const systemPrompt = "You are an expert curriculum developer. Generate a detailed lesson plan based on the provided subject and topic. The plan should include the following sections: 'Learning Objectives', 'Materials', 'Introduction (Hook)', 'Direct Instruction', 'Guided Practice', 'Independent Practice', 'Assessment', and 'Homework'. Use clear headings and well-structured paragraphs. Do not add any conversational text, only the lesson plan content itself.";
+            const userQuery = `Generate a lesson plan for the subject "${subject}" on the topic of "${topic}".`;
+            
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+
+            try {
+                const response = await fetch(GEMINI_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                const lessonPlan = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (lessonPlan) {
+                    outputTextarea.value = lessonPlan;
+                    showMessage('Lesson plan generated successfully!', 'success');
+                } else {
+                    outputTextarea.value = 'Failed to generate a lesson plan. Please try again.';
+                    showMessage('Failed to generate lesson plan. Please try again.', 'error');
+                }
+            } catch (error) {
+                console.error('Gemini API error:', error);
+                outputTextarea.value = 'An error occurred with the AI. Please try again later.';
+                showMessage('An error occurred with the AI. Please try again later.', 'error');
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '✨ Generate Lesson Plan';
+            }
+        }
+
+        document.getElementById('registrationForm').addEventListener('submit', registerUser);
+        document.getElementById('loginForm').addEventListener('submit', loginUser);
+        document.getElementById('uploadNotesForm').addEventListener('submit', uploadNotes);
+        document.getElementById('createTestForm').addEventListener('submit', createTest);
+        document.getElementById('generateLessonPlanForm').addEventListener('submit', (e) => e.preventDefault());
+    </script>
+</body>
+</html>

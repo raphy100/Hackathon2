@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Freemium Model Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            transition: all 0.3s ease-in-out;
+        }
+        .card {
+            background-color: white;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #2563eb;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen text-gray-800 p-4">
+
+    <div id="app" class="max-w-xl w-full p-8 text-center">
+        <h1 class="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-6 leading-tight">Freemium Model in Action</h1>
+        <p class="text-lg text-gray-600 mb-8">
+            Toggle the switch to see the difference between the **Free** and **Premium** tiers.
+        </p>
+
+        <div class="flex items-center justify-center space-x-4 mb-8">
+            <span id="plan-label-free" class="font-medium text-gray-600">Free Tier</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="plan-toggle">
+                <span class="slider"></span>
+            </label>
+            <span id="plan-label-premium" class="font-medium text-blue-600">Premium Tier</span>
+        </div>
+
+        <!-- Dynamic Content Card -->
+        <div id="content-card" class="card p-8 sm:p-10 w-full flex items-center justify-center min-h-[300px]">
+            <p id="loading-message" class="text-gray-500 text-lg">Loading user data...</p>
+        </div>
+
+    </div>
+
+    <script type="module">
+        // Firebase SDK imports for Firestore and Auth
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables provided by the canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // UI elements
+        const planToggle = document.getElementById('plan-toggle');
+        const contentCard = document.getElementById('content-card');
+        const planLabelFree = document.getElementById('plan-label-free');
+        const planLabelPremium = document.getElementById('plan-label-premium');
+
+        let unsubscribeFromFirestore = null;
+
+        // Listen for authentication state changes and handle all auth logic
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // User is signed in.
+                const userId = user.uid;
+                // Define the document path for user-specific data
+                const userDocRef = doc(db, `/artifacts/${appId}/users/${userId}/data/freemium_data`);
+
+                // Check if user document exists and create it if not
+                const docSnap = await getDoc(userDocRef);
+                if (!docSnap.exists()) {
+                    await setDoc(userDocRef, {
+                        isPremium: false,
+                        aiGenerationsRemaining: 5, // Initial free tier limit
+                        billingCycle: 'none'
+                    });
+                }
+                
+                // Set up real-time listener for the user's plan data
+                unsubscribeFromFirestore = onSnapshot(userDocRef, (doc) => {
+                    if (doc.exists()) {
+                        const userData = doc.data();
+                        const isPremium = userData.isPremium;
+                        const generations = userData.aiGenerationsRemaining;
+                        const billingCycle = userData.billingCycle;
+                        updateUI(isPremium, generations, billingCycle);
+                    } else {
+                        // Document doesn't exist (should not happen after initial creation)
+                        console.error("User data document not found.");
+                    }
+                });
+
+            } else {
+                // No user is signed in. Sign in anonymously or with custom token.
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Authentication failed:", error);
+                }
+            }
+        });
+
+        // Function to handle a purchase
+        async function buyPlan(planType) {
+            const userId = auth.currentUser.uid;
+            const userDocRef = doc(db, `/artifacts/${appId}/users/${userId}/data/freemium_data`);
+
+            // This is a simplified purchase logic. In a real app, this would
+            // be tied to a successful payment and a backend process.
+            const dataToUpdate = {
+                isPremium: true,
+                billingCycle: planType
+            };
+
+            try {
+                await setDoc(userDocRef, dataToUpdate, { merge: true });
+                console.log(`Successfully purchased a ${planType} plan!`);
+            } catch (error) {
+                console.error("Error updating plan:", error);
+            }
+        }
+
+        async function updatePlanStatus(isPremiumStatus) {
+            const userId = auth.currentUser.uid;
+            const userDocRef = doc(db, `/artifacts/${appId}/users/${userId}/data/freemium_data`);
+            
+            try {
+                await setDoc(userDocRef, { isPremium: isPremiumStatus }, { merge: true });
+                console.log("Plan updated via toggle!");
+            } catch (error) {
+                console.error("Error updating plan:", error);
+            }
+        }
+
+        function updateUI(isPremium, remainingGenerations, billingCycle) {
+            // Update the toggle switch state
+            planToggle.checked = isPremium;
+
+            // Adjust label styles
+            planLabelFree.classList.toggle('text-gray-900', !isPremium);
+            planLabelFree.classList.toggle('text-gray-600', isPremium);
+            planLabelPremium.classList.toggle('text-blue-600', isPremium);
+            planLabelPremium.classList.toggle('text-gray-600', !isPremium);
+
+            // Render the appropriate UI content
+            if (isPremium) {
+                // Render Premium UI
+                contentCard.innerHTML = `
+                    <div class="space-y-6">
+                        <div class="flex items-center justify-center text-blue-600 text-6xl mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" viewBox="0 0 24 24" fill="currentColor">
+                                <path fill-rule="evenodd" d="M2.25 6a3 3 0 013-3h15a3 3 0 013 3v2.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V6zm0 9.75a3 3 0 013-3h4.5a3 3 0 013 3v2.25a3 3 0 01-3 3h-4.5a3 3 0 01-3-3v-2.25zM17.25 12a3 3 0 00-3 3v2.25a3 3 0 003 3h4.5a3 3 0 003-3v-2.25a3 3 0 00-3-3h-4.5z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <h2 class="text-3xl font-bold text-gray-900">Premium Plan Unlocked</h2>
+                        <p class="text-gray-700 leading-relaxed">
+                            Welcome to unlimited AI generations, advanced analytics, and all future features. You are currently on the **${billingCycle}** plan.
+                        </p>
+                        <ul class="text-left text-gray-600 space-y-2">
+                            <li class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.916 4.626a.75.75 0 01.208 1.107l-7.625 10.65a.75.75 0 01-1.144.075L7.875 12.5a.75.75 0 011.233-.84l3.193 4.673 6.84-9.576a.75.75 0 011.103-.208z" clip-rule="evenodd" /></svg>Unlimited AI Generations</li>
+                            <li class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.916 4.626a.75.75 0 01.208 1.107l-7.625 10.65a.75.75 0 01-1.144.075L7.875 12.5a.75.75 0 011.233-.84l3.193 4.673 6.84-9.576a.75.75 0 011.103-.208z" clip-rule="evenodd" /></svg>Advanced Analytics</li>
+                            <li class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.916 4.626a.75.75 0 01.208 1.107l-7.625 10.65a.75.75 0 01-1.144.075L7.875 12.5a.75.75 0 011.233-.84l3.193 4.673 6.84-9.576a.75.75 0 011.103-.208z" clip-rule="evenodd" /></svg>Priority Support</li>
+                        </ul>
+                    </div>
+                `;
+            } else {
+                // Render Free UI
+                contentCard.innerHTML = `
+                    <div class="space-y-6">
+                        <div class="flex items-center justify-center text-red-500 text-6xl mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" viewBox="0 0 24 24" fill="currentColor">
+                                <path fill-rule="evenodd" d="M2.25 6a3 3 0 013-3h15a3 3 0 013 3v2.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V6zm0 9.75a3 3 0 013-3h4.5a3 3 0 013 3v2.25a3 3 0 01-3 3h-4.5a3 3 0 01-3-3v-2.25zM17.25 12a3 3 0 00-3 3v2.25a3 3 0 003 3h4.5a3 3 0 003-3v-2.25a3 3 0 00-3-3h-4.5z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <h2 class="text-3xl font-bold text-gray-900">Free Tier</h2>
+                        <p class="text-gray-700 leading-relaxed">
+                            You're currently on the free plan with limited access. Choose a plan to unlock the full potential of your educational portal.
+                        </p>
+                        <div class="bg-gray-100 p-4 rounded-xl text-lg font-medium text-gray-700">
+                            You have <span class="text-red-500 font-extrabold">${remainingGenerations}</span> AI generations remaining this month.
+                        </div>
+                        <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4 mt-6 justify-center">
+                            <button onclick="buyPlan('monthly')" class="w-full sm:w-auto px-6 py-3 text-white font-bold bg-blue-600 rounded-full hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300 transform hover:scale-105">
+                                Go Monthly ($9.99)
+                            </button>
+                            <button onclick="buyPlan('yearly')" class="w-full sm:w-auto px-6 py-3 text-white font-bold bg-green-600 rounded-full hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-300 transition-all duration-300 transform hover:scale-105">
+                                Go Yearly ($99.99)
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Listen for toggle switch changes and update Firestore
+        if (!planToggle.hasClickListener) {
+            planToggle.addEventListener('change', (e) => {
+                const isPremiumStatus = e.target.checked;
+                updatePlanStatus(isPremiumStatus);
+            });
+            planToggle.hasClickListener = true;
+        }
+    </script>
+</body>
+</html>
